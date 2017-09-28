@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+
 import logging
 import logging.handlers
 import tarfile
 import os
+from sys import stdout
 from six.moves import urllib
 
 
@@ -83,7 +86,8 @@ class MobileNetDefaultFile(object):
 def download_and_uncompress_tarball(data_dir, filename):
 
     def _progress(count, block_size, total_size):
-        logger.info(">> Downloading %s %.1f%%", filename, float(count * block_size) / float(total_size) * 100.0)
+        stdout.write('\r>> Downloading %s %.1f%%' % (filename, float(count * block_size) / float(total_size) * 100.0))
+        stdout.flush()
 
     tarball_url = os.path.join(MobileNetDefaultFile.MODEL_REPO_BASE_URL, filename)
     filepath = os.path.join(data_dir, filename)
@@ -94,6 +98,7 @@ def download_and_uncompress_tarball(data_dir, filename):
         try:
             logger.info("Downloading file from %s ...", tarball_url)
             filepath, _ = urllib.request.urlretrieve(tarball_url, filepath, _progress)
+            print()
             statinfo = os.stat(filepath)
             logger.info("Successfully downloaded '%s': %s bytes.", filename, str(statinfo.st_size))
             success = True
