@@ -1,2 +1,4 @@
 six
 tensorflow
+numpy
+scikit-image
