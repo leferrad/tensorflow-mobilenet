@@ -7,11 +7,12 @@ import logging
 import logging.handlers
 import tarfile
 import os
+import json
 from sys import stdout
 from six.moves import urllib
 
 
-def get_logger(name='tensorflow-mobilenet', level='debug'):
+def get_logger(name='mobilenet', level='debug'):
     """
     Function to obtain a normal logger
 
@@ -126,3 +127,25 @@ def is_valid_slim_directory(slim_directory):
     expected_subfolders = ['nets', 'preprocessing', 'datasets']  # The most important ones
     actual_subfolders = os.listdir(slim_directory)
     return all([f in actual_subfolders for f in expected_subfolders])
+
+
+def save_dict_as_json(dictobj, filename, pretty_print=True):
+    try:
+        with open(filename, 'w') as f:
+            if pretty_print is True:
+                json.dump(dictobj, f, sort_keys=True, indent=4)
+            else:
+                json.dump(dictobj, f)
+        successful = True
+    except:
+        successful = False
+    return successful
+
+
+def load_json_as_dict(filename):
+    try:
+        with open(filename, 'r') as f:
+            dictobj = json.load(f)
+    except:
+        dictobj = None
+    return dictobj
