@@ -32,7 +32,7 @@ def get_label_map_proto_path():
     return os.path.abspath(os.path.join(get_imagenet_path(), 'imagenet_2012_challenge_label_map_proto.pbtxt'))
 
 
-def get_label_map_path():
+def get_synset_to_human_label_map_path():
     return os.path.abspath(os.path.join(get_imagenet_path(), 'imagenet_synset_to_human_label_map.txt'))
 
 
@@ -44,14 +44,19 @@ def get_words_hierarchy_path():
     return os.path.abspath(os.path.join(get_imagenet_path(), 'wordnet.is_a.txt'))
 
 
+def get_labels_path():
+    return os.path.abspath(os.path.join(get_imagenet_path(), 'labels.txt'))
+
+
 paths = {'root': get_root_path(),
          'mobilenet': get_mobilenet_path(),
          'scripts': get_scripts_path(),
          'gloss': get_gloss_path(),
          'label_map_proto': get_label_map_proto_path(),
-         'label_map': get_label_map_path(),
+         'synset_to_human_label_map': get_synset_to_human_label_map_path(),
          'words': get_words_mapping_path(),
-         'hierarchy': get_words_hierarchy_path()
+         'hierarchy': get_words_hierarchy_path(),
+         'labels': get_labels_path()
          }
 
 
