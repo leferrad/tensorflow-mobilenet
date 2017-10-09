@@ -14,16 +14,21 @@
 
 """Adapted from https://github.com/tensorflow/models/blob/master/research/slim/datasets/imagenet.py"""
 
-from mobilenet.fileio import load_json_as_dict, save_dict_as_json
+from mobilenet.fileio import load_json_as_dict, save_dict_as_json, get_logger
+from mobilenet.paths import paths
 
 from six.moves import urllib
 
 import os
+import re
 
 NUM_CLASSES = 1001
 DATA_BASE_URL = 'https://raw.githubusercontent.com/tensorflow/models/master/research/inception/inception/data/'
 SYNSET_URL = '{}/imagenet_lsvrc_2015_synsets.txt'.format(DATA_BASE_URL)
 SYNSET_TO_HUMAN_URL = '{}/imagenet_metadata.txt'.format(DATA_BASE_URL)
+
+
+logger = get_logger(name=__name__, level='debug')
 
 
 def create_readable_names_for_imagenet_labels():
@@ -96,3 +101,245 @@ def load_imagenet_labels():
         save_dict_as_json(labels, filename=path_to_labels, pretty_print=True)
 
     return labels
+
+
+class NodeLookup(object):
+    """Converts integer node ID's to human readable labels."""
+
+    def __init__(self):
+        self.label_lookup_path = get_label_map_proto_path()
+        self.uid_lookup_path = get_synset_to_human_label_map_path()
+        self.load()
+
+    def load(self):
+        """Loads a human readable English name for each softmax node.
+
+        Args:
+          label_lookup_path: string UID to integer node ID.
+          uid_lookup_path: string UID to human-readable string.
+
+        Returns:
+          dict from integer node ID to human-readable string.
+        """
+        if not os.path.exists(self.uid_lookup_path):
+            logger.error('File does not exist %s', self.uid_lookup_path)
+        if not os.path.exists(self.label_lookup_path):
+            logger.error('File does not exist %s', self.label_lookup_path)
+
+        # Loads mapping from string UID to human-readable string
+        proto_as_ascii_lines = open(self.uid_lookup_path, 'r').readlines()
+        self.uid_to_human = {}
+        p = re.compile(r'[n\d]*[ \S,]*')
+        for line in proto_as_ascii_lines:
+            parsed_items = p.findall(line)
+            uid = parsed_items[0]
+            human_string = parsed_items[2]
+            self.uid_to_human[uid] = human_string
+
+        # Loads mapping from string UID to integer node ID.
+        self.node_id_to_uid = {}
+        proto_as_ascii = open(self.label_lookup_path, 'r').readlines()
+        for line in proto_as_ascii:
+            if line.startswith('  target_class:'):
+                target_class = int(line.split(': ')[1])
+            elif line.startswith('  target_class_string:'):
+                target_class_string = line.split(': ')[1]
+                self.node_id_to_uid[target_class] = target_class_string[1:-2]
+
+        # Loads the final mapping of integer node ID to human-readable string
+        self.node_id_to_name = {}
+        for key, val in self.node_id_to_uid.items():
+            if val not in self.uid_to_human:
+                logger.error('Failed to locate: %s', val)
+            name = self.uid_to_human[val]
+            self.node_id_to_name[key] = name
+
+        # Finally, add the class 0
+        self.node_id_to_name[0] = 'background'
+
+    def id_to_string(self, node_id):
+        return self.node_id_to_name.get(node_id, '')
+
+    def __getitem__(self, item):
+        return self.id_to_string(item)
+
+
+class LabelManager(object):
+    def __init__(self):
+        paths_to_load = ['labels', 'words', 'hierarchy', 'synset_to_human_label_map']
+        self.paths = dict(filter(lambda (k, p): p in paths_to_load, paths.items()))
+        self.label_lookup = None
+        self.load()
+
+    @staticmethod
+    def _parse_2col_txt_into_dict(filename):
+        lines_txt = open(filename, 'r').readlines()
+        result = {}
+        p = re.compile(r'[n\d]*[ \S,]*')
+        for line in lines_txt:
+            parsed_items = p.findall(line)
+            k = parsed_items[0]
+            v = parsed_items[2]
+            result[k] = v
+
+        return result
+
+    def load(self):
+        # Asserting existence of all used paths
+        for p in self.paths.values():
+            if not os.path.exists(p):
+                logger.error('File does not exist %s', p)
+                return
+
+        # Loads mapping from string UID to human-readable string
+        self.uid_to_human = self._parse_2col_txt_into_dict(self.paths['synset_to_human_label_map'])
+
+        # Loads the final mapping of integer node ID to human-readable string
+        self.node_id_to_name = {}
+        for key, val in self.node_id_to_uid.items():
+            if val not in self.uid_to_human:
+                logger.error('Failed to locate: %s', val)
+            name = self.uid_to_human[val]
+            self.node_id_to_name[key] = name
+
+        # Finally, add the class 0
+        self.node_id_to_name[0] = 'background'
+
+    def id_to_string(self, node_id):
+        return self.node_id_to_name.get(node_id, '')
+
+    def __getitem__(self, item):
+        return self.id_to_string(item)
+
+
+class LabelLookup(object):
+    def __init__(self, path_to_labels=None):
+        if path_to_labels is None:
+            path_to_labels = paths['labels']
+
+        self.path = path_to_labels
+
+        if not os.path.exists(self.path):
+            logger.error("Path to labels '%s' does not exist!", self.path)
+            return
+
+        self.label_lookup = {}
+
+        # Loads the mapping of integer node ID to human-readable string
+        with open(self.path, 'r') as lines_txt:
+            for i, line in enumerate(lines_txt):
+                self.label_lookup[i] = line.strip()
+
+    def id_to_string(self, i):
+        return self.label_lookup.get(i, None)
+
+    def __getitem__(self, item):
+        return self.id_to_string(item)
+
+
+class WNIDLookup(object):
+    def __init__(self, path_to_words=None, cache=False):
+        if path_to_words is None:
+            path_to_words = paths['words']
+
+        self.path = path_to_words
+
+        if not os.path.exists(self.path):
+            logger.error("Path to words mapping '%s' does not exist!", self.path)
+            return
+
+        self.flag_cache = cache
+        self.wnid_lookup = {}
+        self.regex = re.compile(r'[n\d]*[ \S,]*')
+
+        if self.flag_cache:
+            self.load_words()
+
+    def generator_lines(self):
+        with open(self.path, 'r') as lines:
+            for line in lines:
+                parsed_items = self.regex.findall(line)
+                if parsed_items:
+                    yield parsed_items[0], parsed_items[2]
+
+    def load_words(self):
+        for k, v in self.generator_lines():
+            self.wnid_lookup[k] = v
+
+    def get_label_from_wnid(self, wnid):
+        if self.flag_cache:
+            return self.wnid_lookup.get(wnid, None)
+        else:
+            for k, v in self.generator_lines():
+                if k == wnid:
+                    return v
+
+    def get_wnid_from_label(self, label):
+        if self.flag_cache:
+            result = None
+            for wnid, lab in self.wnid_lookup.items():
+                if lab == label:
+                    result = wnid
+                    break
+            return result
+
+        else:
+            for k, v in self.generator_lines():
+                if v == label:
+                    return k
+
+
+class HierarchyLookup(object):
+    def __init__(self, path_to_hierarchy=None, cache=True):
+        if path_to_hierarchy is None:
+            path_to_hierarchy = paths['hierarchy']
+
+        self.path = path_to_hierarchy
+
+        if not os.path.exists(self.path):
+            logger.error("Path to hierarchy file '%s' does not exist!", self.path)
+            return
+
+        self.flag_cache = cache
+        self.parent_lookup = {}
+        self.regex = re.compile(r'[n\d]*[ \S,]*')
+
+        if self.flag_cache:
+            self.load_hierarchy_lookup()
+
+    def generator_lines(self):
+        with open(self.path, 'r') as lines:
+            for line in lines:
+                yield line.strip().split(' ')
+
+    def load_hierarchy_lookup(self):
+        for w1, w2 in self.generator_lines():
+            if w2 not in self.parent_lookup:
+                self.parent_lookup[w2] = [w1]
+            else:
+                self.parent_lookup[w2].append(w1)
+
+    def get_full_hierarchy(self, item):
+        result = [tuple([item])]
+        done = False
+        item = tuple([item])
+        while not done:
+            parents = reduce(lambda a, b: a+b, [self.parent_lookup.get(it, []) for it in item])
+            if len(parents) == 0:
+                done = True
+                break
+            else:
+                result = [tuple(parents)]+result
+                item = parents
+        return result
+
+
+
+if __name__ == '__main__':
+    node_lookup = LabelLookup()
+    print("Labels: %s" % str(node_lookup.label_lookup.items()))
+
+    wnid = 'n02124075'
+
+    h = HierarchyLookup()
+    print("H: %s" % h.get_full_hierarchy(wnid))
