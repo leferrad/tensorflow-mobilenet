@@ -551,6 +551,10 @@ class MobileNetV1Restored(object):
         logger.info("%i ops in the final graph.", len(output_graph_def.node))
 
     def get_output(self, nparr, get_embedding=False):
+        if self.sess is None:
+            raise ValueError("TensorFlow session was not initialized! "
+                             "Restore a session before predicting.")
+
         if get_embedding:
             prediction, embedding = self.sess.run((self.output_tensor, self.embedding_tensor),
                                                   {self.input_tensor: nparr})
@@ -563,40 +567,38 @@ class MobileNetV1Restored(object):
             output = prediction
         return output
 
-    def load_and_predict_on_images(self, model_filename, images_path):
+    def predict_on_images(self, images_path):
 
         # Now load model and make inferences
         predictions = []
 
-        _ = self.restore_session_from_frozen_graph(filename=model_filename)
+        t_ini = time.time()
 
         for fn in os.listdir(images_path):
             if not fn.endswith('.jpg') and not fn.endswith('.png'):
                 continue
-            tic = time.time()
+
+            logger.info("Processing image '%s' and making prediction...", fn)
             img = self.load_and_prepare_image(os.path.join(images_path, fn), img_size=self.img_size)
 
+            tic = time.time()
             prediction = self.get_output(img, get_embedding=False)
-
-            top_predictions = self.prediction_to_classes(prediction, n_top=10)
-            logger.info("Top %i predictions for the image given by '%s':", 10, fn)
-            c = 1
-            for l, p in top_predictions:
-                logger.info("%i. %s (prob=%.5f)", c, l, p)
-                c += 1
-
             toc = time.time()
 
-            logger.info("Detection made in %.3f sec \n" % (toc-tic))
+            logger.info("Prediction made in %.4f sec", toc-tic)
 
             predictions.append((fn, prediction))
 
-        return predictions
+        t_end = time.time()
+
+        logger.info("Elapsed time on making %i predictions: %.4f sec",
+                    len(predictions), t_end - t_ini)
+
+        return dict(predictions)
 
     def prediction_to_classes(self, prediction, n_top=10):
         top_predictions = sorted(enumerate(prediction), key=lambda (i, p): -p)[:n_top]
         return [(self.labels[i], p) for (i, p) in top_predictions]
-
 
     @staticmethod
     def load_and_prepare_image(filename, img_size=224):

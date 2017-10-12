@@ -29,9 +29,20 @@ if __name__ == '__main__':
         exit(0)
 
     try:
-        logger.info("Processing meta_file '%s' ...", pb_path)
+        logger.info("Processing pb_file '%s' ...", pb_path)
         mobilenet_model = MobileNetV1Restored(img_size=224, model_factor=1.0)
-        predictions = mobilenet_model.load_and_predict_on_images(pb_path, img_path)
+        _ = mobilenet_model.restore_session_from_frozen_graph(filename=pb_path)
+        predictions = mobilenet_model.predict_on_images(img_path)
+
+        for fn, prediction in predictions.items():
+
+            top_predictions = mobilenet_model.prediction_to_classes(prediction, n_top=10)
+            logger.info("Top %i predictions for the image given by '%s':", 10, fn)
+            c = 1
+            for l, p in top_predictions:
+                logger.info("%i. %s (prob=%.5f)", c, l, p)
+                c += 1
+            logger.info("\n")
 
         logger.info("DONE")
 
