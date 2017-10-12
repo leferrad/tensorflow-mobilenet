@@ -454,6 +454,7 @@ class MobileNetV1Restored(object):
 
         self.input_tensor = None
         self.output_tensor = None
+        self.embedding_tensor = None
 
         self.labels = load_imagenet_labels()
 
@@ -499,6 +500,8 @@ class MobileNetV1Restored(object):
         predictions = tf.contrib.layers.softmax(logits)
         self.output_tensor = tf.identity(predictions, name=self.output_node_name)
 
+        self.embedding_tensor = end_points['AvgPool_1a']
+
         # We retrieve the protobuf graph definition
         graph = tf.get_default_graph()
 
@@ -520,6 +523,7 @@ class MobileNetV1Restored(object):
 
         self.input_tensor = graph.get_tensor_by_name('mobilenet/'+self.input_node_name+':0')
         self.output_tensor = graph.get_tensor_by_name('mobilenet/'+self.output_node_name+':0')
+        self.embedding_tensor = graph.get_tensor_by_name('mobilenet/MobilenetV1/Logits/AvgPool_1a/AvgPool:0')
 
         if tensorboard:
             tf.summary.FileWriter(self.logs_directory, graph=graph)
@@ -546,6 +550,19 @@ class MobileNetV1Restored(object):
             f.write(output_graph_def.SerializeToString())
         logger.info("%i ops in the final graph.", len(output_graph_def.node))
 
+    def get_output(self, nparr, get_embedding=False):
+        if get_embedding:
+            prediction, embedding = self.sess.run((self.output_tensor, self.embedding_tensor),
+                                                  {self.input_tensor: nparr})
+            prediction = np.squeeze(prediction)
+            embedding = np.squeeze(embedding)
+            output = prediction, embedding
+        else:
+            prediction = self.sess.run(self.output_tensor, {self.input_tensor: nparr})
+            prediction = np.squeeze(prediction)
+            output = prediction
+        return output
+
     def load_and_predict_on_images(self, model_filename, images_path):
 
         # Now load model and make inferences
@@ -559,8 +576,7 @@ class MobileNetV1Restored(object):
             tic = time.time()
             img = self.load_and_prepare_image(os.path.join(images_path, fn), img_size=self.img_size)
 
-            prediction = self.sess.run(self.output_tensor, {self.input_tensor: img})
-            prediction = np.squeeze(prediction)
+            prediction = self.get_output(img, get_embedding=False)
 
             top_predictions = self.prediction_to_classes(prediction, n_top=10)
             logger.info("Top %i predictions for the image given by '%s':", 10, fn)
