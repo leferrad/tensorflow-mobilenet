@@ -50,6 +50,7 @@ def get_labels_path():
 
 paths = {'root': get_root_path(),
          'mobilenet': get_mobilenet_path(),
+         'imagenet': get_imagenet_path(),
          'scripts': get_scripts_path(),
          'gloss': get_gloss_path(),
          'label_map_proto': get_label_map_proto_path(),

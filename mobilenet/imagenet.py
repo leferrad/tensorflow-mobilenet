@@ -84,7 +84,7 @@ def create_readable_names_for_imagenet_labels():
 
 
 def load_imagenet_labels():
-    path_to_labels = '../labels.json'
+    path_to_labels = os.path.join(paths['imagenet'], 'labels.json')
 
     labels = None
 
@@ -98,7 +98,7 @@ def load_imagenet_labels():
     if labels is None:
         # return: list
         labels = create_readable_names_for_imagenet_labels()
-        save_dict_as_json(labels, filename=path_to_labels, pretty_print=True)
+        #save_dict_as_json(labels, filename=path_to_labels, pretty_print=True)
 
     return labels
 

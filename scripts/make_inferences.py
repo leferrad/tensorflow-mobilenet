@@ -2,6 +2,7 @@ from __future__ import print_function
 
 from mobilenet.core import MobileNetV1Restored
 from mobilenet.fileio import get_logger
+from mobilenet.imagenet import LabelLookup
 
 import os
 import argparse
@@ -33,10 +34,13 @@ if __name__ == '__main__':
         mobilenet_model = MobileNetV1Restored(img_size=224, model_factor=1.0)
         _ = mobilenet_model.restore_session_from_frozen_graph(filename=pb_path)
         predictions = mobilenet_model.predict_on_images(img_path)
+        label_lookup = LabelLookup()
 
         for fn, prediction in predictions.items():
 
-            top_predictions = mobilenet_model.prediction_to_classes(prediction, n_top=10)
+            top_predictions = sorted(enumerate(prediction), key=lambda (i, p): -p)[:10]
+            top_predictions = [(label_lookup.id_to_string(i), p) for (i, p) in top_predictions]
+
             logger.info("Top %i predictions for the image given by '%s':", 10, fn)
             c = 1
             for l, p in top_predictions:
