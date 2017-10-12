@@ -103,67 +103,6 @@ def load_imagenet_labels():
     return labels
 
 
-class NodeLookup(object):
-    """Converts integer node ID's to human readable labels."""
-
-    def __init__(self):
-        self.label_lookup_path = get_label_map_proto_path()
-        self.uid_lookup_path = get_synset_to_human_label_map_path()
-        self.load()
-
-    def load(self):
-        """Loads a human readable English name for each softmax node.
-
-        Args:
-          label_lookup_path: string UID to integer node ID.
-          uid_lookup_path: string UID to human-readable string.
-
-        Returns:
-          dict from integer node ID to human-readable string.
-        """
-        if not os.path.exists(self.uid_lookup_path):
-            logger.error('File does not exist %s', self.uid_lookup_path)
-        if not os.path.exists(self.label_lookup_path):
-            logger.error('File does not exist %s', self.label_lookup_path)
-
-        # Loads mapping from string UID to human-readable string
-        proto_as_ascii_lines = open(self.uid_lookup_path, 'r').readlines()
-        self.uid_to_human = {}
-        p = re.compile(r'[n\d]*[ \S,]*')
-        for line in proto_as_ascii_lines:
-            parsed_items = p.findall(line)
-            uid = parsed_items[0]
-            human_string = parsed_items[2]
-            self.uid_to_human[uid] = human_string
-
-        # Loads mapping from string UID to integer node ID.
-        self.node_id_to_uid = {}
-        proto_as_ascii = open(self.label_lookup_path, 'r').readlines()
-        for line in proto_as_ascii:
-            if line.startswith('  target_class:'):
-                target_class = int(line.split(': ')[1])
-            elif line.startswith('  target_class_string:'):
-                target_class_string = line.split(': ')[1]
-                self.node_id_to_uid[target_class] = target_class_string[1:-2]
-
-        # Loads the final mapping of integer node ID to human-readable string
-        self.node_id_to_name = {}
-        for key, val in self.node_id_to_uid.items():
-            if val not in self.uid_to_human:
-                logger.error('Failed to locate: %s', val)
-            name = self.uid_to_human[val]
-            self.node_id_to_name[key] = name
-
-        # Finally, add the class 0
-        self.node_id_to_name[0] = 'background'
-
-    def id_to_string(self, node_id):
-        return self.node_id_to_name.get(node_id, '')
-
-    def __getitem__(self, item):
-        return self.id_to_string(item)
-
-
 class LabelManager(object):
     def __init__(self):
         paths_to_load = ['labels', 'words', 'hierarchy', 'synset_to_human_label_map']
@@ -319,18 +258,24 @@ class HierarchyLookup(object):
             else:
                 self.parent_lookup[w2].append(w1)
 
-    def get_full_hierarchy(self, item):
+    def get_full_hierarchy(self, item, flat=True, depth=-1):
         result = [tuple([item])]
-        done = False
         item = tuple([item])
-        while not done:
+        d = 0
+        if depth == -1:
+            depth = float("inf")
+        while d < depth:
             parents = reduce(lambda a, b: a+b, [self.parent_lookup.get(it, []) for it in item])
             if len(parents) == 0:
-                done = True
                 break
             else:
                 result = [tuple(parents)]+result
                 item = parents
+                d += 1
+
+        if flat:
+            result = reduce(lambda a, b: a+b, map(lambda x: list(x), result))
+
         return result
 
 
@@ -341,5 +286,11 @@ if __name__ == '__main__':
 
     wnid = 'n02124075'
 
-    h = HierarchyLookup()
-    print("H: %s" % h.get_full_hierarchy(wnid))
+    hier_lookup = HierarchyLookup()
+    hier = hier_lookup.get_full_hierarchy(wnid, flat=True, depth=5)
+
+
+    wnid_lookup = WNIDLookup(cache=True)
+
+    for w in reversed(hier):
+        print("wnid=%s, label=%s" % (w, wnid_lookup.get_label_from_wnid(w)))
