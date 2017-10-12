@@ -107,7 +107,7 @@ from __future__ import print_function
 
 # From this repo
 from mobilenet.fileio import get_logger
-from mobilenet.util import load_imagenet_labels
+from mobilenet.imagenet import load_imagenet_labels
 
 from scipy.misc import imread, imresize
 import numpy as np
@@ -362,25 +362,25 @@ mobilenet_v1_025 = wrapped_partial(mobilenet_v1, depth_multiplier=0.25)
 
 
 def _reduced_kernel_size_for_small_input(input_tensor, kernel_size):
-  """Define kernel size which is automatically reduced for small input.
+    """Define kernel size which is automatically reduced for small input.
 
-  If the shape of the input images is unknown at graph construction time this
-  function assumes that the input images are large enough.
+    If the shape of the input images is unknown at graph construction time this
+    function assumes that the input images are large enough.
 
-  Args:
+    Args:
     input_tensor: input tensor of size [batch_size, height, width, channels].
     kernel_size: desired kernel size of length 2: [kernel_height, kernel_width]
 
-  Returns:
+    Returns:
     a tensor with the kernel size.
-  """
-  shape = input_tensor.get_shape().as_list()
-  if shape[1] is None or shape[2] is None:
-    kernel_size_out = kernel_size
-  else:
-    kernel_size_out = [min(shape[1], kernel_size[0]),
-                       min(shape[2], kernel_size[1])]
-  return kernel_size_out
+    """
+    shape = input_tensor.get_shape().as_list()
+    if shape[1] is None or shape[2] is None:
+        kernel_size_out = kernel_size
+    else:
+        kernel_size_out = [min(shape[1], kernel_size[0]),
+                           min(shape[2], kernel_size[1])]
+    return kernel_size_out
 
 
 def mobilenet_v1_arg_scope(is_training=True,
@@ -441,7 +441,8 @@ class MobileNetDefaultFile(object):
 
 class MobileNetV1Restored(object):
     def __init__(self, img_size=224, model_factor=1.0, weight_decay=0.0, num_classes=1001,
-                 input_node_name='input', output_node_name='output'):
+                 input_node_name='input', output_node_name='output',
+                 logs_directory='/tmp/tf-logs/'):
         self.img_size = img_size
         self.model_factor = model_factor
         self.weight_decay = weight_decay
@@ -455,6 +456,11 @@ class MobileNetV1Restored(object):
         self.output_tensor = None
 
         self.labels = load_imagenet_labels()
+
+        self.logs_directory = logs_directory
+
+        if not os.path.exists(self.logs_directory):
+            os.mkdir(self.logs_directory)
 
         # Start an interactive session
         self.sess = tf.InteractiveSession()
@@ -478,7 +484,7 @@ class MobileNetV1Restored(object):
 
         return graph
 
-    def restore_session_from_checkpoint(self, filename):
+    def restore_session_from_checkpoint(self, filename, tensorboard=True):
         # tf.reset_default_graph()
 
         # Insert Input placeholder for images
@@ -502,6 +508,22 @@ class MobileNetV1Restored(object):
         saver = tf.train.Saver(rest_var)
         saver.restore(self.sess, filename)
 
+        if tensorboard:
+            tf.summary.FileWriter(self.logs_directory, graph=graph)
+
+        return graph
+
+    def restore_session_from_frozen_graph(self, filename, tensorboard=True):
+        graph = self.load_frozen_graph(filename, graph_name='mobilenet')
+
+        self.sess = tf.InteractiveSession(graph=graph)
+
+        self.input_tensor = graph.get_tensor_by_name('mobilenet/'+self.input_node_name+':0')
+        self.output_tensor = graph.get_tensor_by_name('mobilenet/'+self.output_node_name+':0')
+
+        if tensorboard:
+            tf.summary.FileWriter(self.logs_directory, graph=graph)
+
         return graph
 
     def freeze_inference_graph(self, input_checkpoint, output_filename='frozen_graph.pb'):
@@ -524,29 +546,24 @@ class MobileNetV1Restored(object):
             f.write(output_graph_def.SerializeToString())
         logger.info("%i ops in the final graph.", len(output_graph_def.node))
 
-    def load_and_predict_on_images(self, model_filename, images_path, logs_directory='/tmp/tf-logs'):
+    def load_and_predict_on_images(self, model_filename, images_path):
 
         # Now load model and make inferences
         predictions = []
 
-        graph = self.load_frozen_graph(model_filename, graph_name='mobilenet')
+        _ = self.restore_session_from_frozen_graph(filename=model_filename)
 
-        self.sess = tf.InteractiveSession(graph=graph)
-
-        tf.summary.FileWriter(logs_directory, graph=graph)
-
-        input_tensor = graph.get_tensor_by_name('mobilenet/'+self.input_node_name+':0')
-        output_tensor = graph.get_tensor_by_name('mobilenet/'+self.output_node_name+':0')
-
-        for im in os.listdir(images_path):
+        for fn in os.listdir(images_path):
+            if not fn.endswith('.jpg') and not fn.endswith('.png'):
+                continue
             tic = time.time()
-            img = self.load_and_prepare_image(os.path.join(images_path, im), img_size=self.img_size)
+            img = self.load_and_prepare_image(os.path.join(images_path, fn), img_size=self.img_size)
 
-            prediction = self.sess.run(output_tensor, {input_tensor: img})
+            prediction = self.sess.run(self.output_tensor, {self.input_tensor: img})
             prediction = np.squeeze(prediction)
 
             top_predictions = self.prediction_to_classes(prediction, n_top=10)
-            logger.info("Top %i predictions for the image given by '%s':", 10, im)
+            logger.info("Top %i predictions for the image given by '%s':", 10, fn)
             c = 1
             for l, p in top_predictions:
                 logger.info("%i. %s (prob=%.5f)", c, l, p)
@@ -556,7 +573,7 @@ class MobileNetV1Restored(object):
 
             logger.info("Detection made in %.3f sec \n" % (toc-tic))
 
-            predictions.append((im, prediction))
+            predictions.append((fn, prediction))
 
         return predictions
 
