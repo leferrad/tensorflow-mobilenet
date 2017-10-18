@@ -2,7 +2,7 @@ from __future__ import print_function
 
 from mobilenet.core import MobileNetDefaultFile, MobileNetV1Restored
 from mobilenet.fileio import download_and_uncompress_tarball, get_logger
-from mobilenet.util import create_readable_names_for_imagenet_labels
+from mobilenet.imagenet import create_readable_names_for_imagenet_labels
 
 import os
 import re
