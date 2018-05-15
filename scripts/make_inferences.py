@@ -13,17 +13,14 @@ logger = get_logger(name="make_inferences", level='debug')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-pb', '--pb-path', dest='pb_path', #required=True,
+    parser.add_argument('-pb', '--pb-path', dest='pb_path', required=True,
                         help="Path to inference graph in Protobuf format (i.e. file ending with .pb)")
-    parser.add_argument('-img', '--img', dest='img_path', #required=True,
+    parser.add_argument('-img', '--img', dest='img_path', required=True,
                         help="Path to directory with images to use for predictions")
     args = parser.parse_args()
 
-    #pb_path = args.pb_path
-
-    pb_path = '/home/leeandro04/Escritorio/NEW_mobilenet_v1_1.0_224_2017_06_14/frozen_graph.pb'
-    #img_path = '/home/leeandro04/work/poc_lbp_pic/img/whatsapp/'
-    img_path = '/home/leeandro04/Escritorio/imgs/'
+    pb_path = args.pb_path
+    img_path = args.img_path
 
     if not os.path.exists(pb_path):
         logger.error("Argument '-pb' not valid! Please enter the correct path to the MobileNet protobuf model.")
