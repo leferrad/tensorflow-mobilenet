@@ -108,6 +108,7 @@ from __future__ import print_function
 # From this repo
 from mobilenet.fileio import get_logger
 from mobilenet.imagenet import load_imagenet_labels
+from mobilenet.toco import toco_convert, FLOAT, QUANTIZED_UINT8
 
 from scipy.misc import imread, imresize
 import numpy as np
@@ -597,8 +598,19 @@ class MobileNetV1Restored(object):
         return dict(predictions)
 
     def prediction_to_classes(self, prediction, n_top=10):
-        top_predictions = sorted(enumerate(prediction), key=lambda (i, p): -p)[:n_top]
+        top_predictions = sorted(enumerate(prediction), key=lambda i_p: -i_p[1])[:n_top]
         return [(self.labels[i], p) for (i, p) in top_predictions]
+
+    def convert_tflite_format(self, output_filename, quantized=False):
+        inference_type = QUANTIZED_UINT8 if quantized else FLOAT
+        quantized_input_stats = None if QUANTIZED_UINT8 else None  # TODO: fill this!
+
+        success = toco_convert(input_data=self.sess.graph_def, input_tensors=[self.input_tensor],
+                               output_tensors=[self.output_tensor, self.embedding_tensor],
+                               inference_type=inference_type, quantized_input_stats=quantized_input_stats,
+                               output_filename=output_filename)
+
+        return success
 
     @staticmethod
     def load_and_prepare_image(filename, img_size=224):
