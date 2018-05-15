@@ -10,6 +10,9 @@ import json
 import argparse
 
 
+logger = get_logger(name="freeze_mobilenet", level='debug')
+
+
 def create_label_json_file(json_fn):
     labels = create_readable_names_for_imagenet_labels()
 
@@ -21,8 +24,6 @@ def create_label_json_file(json_fn):
 
     return labels
 
-logger = get_logger(name="freeze_mobilenet", level='debug')
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -31,8 +32,7 @@ if __name__ == '__main__':
                         help="Path to directory with the checkpoints of the MobileNet model")
     args = parser.parse_args()
 
-    #checkpoint_path = args.checkpoint_path
-    checkpoint_path = '/home/leeandro04/Escritorio/NEW_mobilenet_v1_1.0_224_2017_06_14'
+    checkpoint_path = args.checkpoint_path
 
     if checkpoint_path == '':
         # Then we have to download a default model
@@ -48,7 +48,6 @@ if __name__ == '__main__':
         img_size = MobileNetDefaultFile.IMG_SIZE
 
         logger.info("Setting default model properties...")
-
 
         model_dl = MobileNetDefaultFile.MODEL_DL_FMT.format(factor, img_size,
                                                             MobileNetDefaultFile.MODEL_DATE)
@@ -99,7 +98,6 @@ if __name__ == '__main__':
             mobilenet_model = MobileNetV1Restored(img_size=int(img_size), model_factor=float(factor))
             mobilenet_model.freeze_inference_graph(checkpoint_file, output_filename='frozen_graph.pb')
             create_label_json_file('/tmp/mobilenet/labels.json')
-            #copyfile(os.path.join(model_dir, model_pb), os.path.join(img_subdir, model_pb))
         else:
             logger.info("Skipping not existing meta file '%s'...", checkpoint_file)
             pass
