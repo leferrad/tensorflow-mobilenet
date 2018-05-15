@@ -420,7 +420,7 @@ def mobilenet_v1_arg_scope(is_training=True,
         with slim.arg_scope([slim.batch_norm], **batch_norm_params):
             with slim.arg_scope([slim.conv2d], weights_regularizer=regularizer):
                 with slim.arg_scope([slim.separable_conv2d],
-                                weights_regularizer=depthwise_regularizer) as sc:
+                                    weights_regularizer=depthwise_regularizer) as sc:
                     return sc
 
 
@@ -450,8 +450,10 @@ class MobileNetV1Restored(object):
         self.num_classes = num_classes
 
         # Store node names for useful tensors
-        self.input_node_name = input_node_name
-        self.output_node_name = output_node_name
+        self.input_node_name = 'mobilenet/%s:0' % input_node_name
+        self.output_node_name = 'mobilenet/%s:0' % output_node_name
+        # TODO: a smarter way to figure out the embeddings tensor name?
+        self.embedding_node_name = 'mobilenet/MobilenetV1/Logits/AvgPool_1a/AvgPool:0'
 
         self.input_tensor = None
         self.output_tensor = None
@@ -522,9 +524,16 @@ class MobileNetV1Restored(object):
 
         self.sess = tf.InteractiveSession(graph=graph)
 
-        self.input_tensor = graph.get_tensor_by_name('mobilenet/'+self.input_node_name+':0')
-        self.output_tensor = graph.get_tensor_by_name('mobilenet/'+self.output_node_name+':0')
-        self.embedding_tensor = graph.get_tensor_by_name('mobilenet/MobilenetV1/Logits/AvgPool_1a/AvgPool:0')
+        self.input_node_name = graph.get_operations()[0].name+':0'
+        self.output_node_name = graph.get_operations()[-1].name+':0'
+
+        self.input_tensor = graph.get_tensor_by_name(self.input_node_name)
+        self.output_tensor = graph.get_tensor_by_name(self.output_node_name)
+        self.embedding_tensor = graph.get_tensor_by_name(self.embedding_node_name)
+
+        self.img_size = int(self.input_tensor.shape[1])
+
+        # TODO: extract model_factor from graph
 
         if tensorboard:
             tf.summary.FileWriter(self.logs_directory, graph=graph)
